@@ -1,11 +1,19 @@
-node_modules/
-dist/
-.vite/
+# Python
+.venv/
+API/venv/
 __pycache__/
 *.pyc
-.ipynb_checkpoints/
+
+# Node
 node_modules/
 dist/
-.vite/
-__pycache__/
-*.pyc
+
+# Env
+.env
+.env.*
+
+# IDE
+.vscode/
+
+# OS
+.DS_Store
