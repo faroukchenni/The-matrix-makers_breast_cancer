@@ -10,8 +10,7 @@ import {
   CartesianGrid,
 } from "recharts";
 import { Crown, ShieldAlert, AlertTriangle, BarChart3 } from "lucide-react";
-
-const API = import.meta.env.VITE_API_BASE ?? "http://127.0.0.1:8000";
+import { api, getApiBase } from "../api"; // ✅ use shared axios instance
 
 const fmtPct = (v) =>
   v === null || v === undefined ? "—" : `${(v * 100).toFixed(2)}%`;
@@ -182,7 +181,7 @@ function ConfusionMatrix({ row }) {
         </div>
       </div>
 
-      {/* ✅ INTENSITY LEGEND (matches matrix colors) */}
+      {/* ✅ INTENSITY LEGEND */}
       <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4">
         <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
           <span className="font-bold text-slate-300">
@@ -358,24 +357,28 @@ export default function Metrics() {
   const [rocMode, setRocMode] = useState("all");
 
   useEffect(() => {
-    const ctrl = new AbortController();
+    // ✅ axios cancellation (works like AbortController)
+    const controller = new AbortController();
+
     (async () => {
       try {
         setLoading(true);
         setErr(null);
-        const res = await fetch(`${API}/evaluation-report`, { signal: ctrl.signal });
-        if (!res.ok) throw new Error(`API ${res.status}`);
-        const json = await res.json();
+
+        const res = await api.get("/evaluation-report", { signal: controller.signal });
+        const json = res.data;
+
         setReport(json);
         setSelectedId(json?.recommended_model_id ?? json?.rows?.[0]?.model_id ?? "");
       } catch (e) {
-        if (e?.name === "AbortError") return;
+        if (e?.name === "CanceledError") return;
         setErr(e?.message ?? String(e));
       } finally {
         setLoading(false);
       }
     })();
-    return () => ctrl.abort();
+
+    return () => controller.abort();
   }, []);
 
   const rows = report?.rows ?? [];
@@ -400,7 +403,7 @@ export default function Metrics() {
     return (
       <div className="min-h-[calc(100vh-2rem)] space-y-6 rounded-3xl bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900 p-6 text-slate-100">
         <div className="text-2xl font-extrabold">Loading evaluation report...</div>
-        <div className="text-sm text-slate-400">API: {API}</div>
+        <div className="text-sm text-slate-400">API: {getApiBase()}</div>
       </div>
     );
   }
@@ -415,7 +418,7 @@ export default function Metrics() {
           </div>
           <div className="mt-2 text-sm text-rose-300">{err}</div>
           <div className="mt-3 text-xs text-rose-400">
-            Check <code>{API}/evaluation-report</code>
+            Check <code>{getApiBase()}/evaluation-report</code>
           </div>
         </div>
       </div>
@@ -484,7 +487,8 @@ export default function Metrics() {
             >
               {rows.map((r) => (
                 <option key={r.model_id} value={r.model_id} className="bg-slate-900">
-                  {displayModelName(r)} {r.model_id === report?.recommended_model_id ? "• Recommended" : ""}
+                  {displayModelName(r)}{" "}
+                  {r.model_id === report?.recommended_model_id ? "• Recommended" : ""}
                 </option>
               ))}
             </select>
