@@ -1,4 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
+import { api } from "../api"; // ✅ use axios instance everywhere
+
 import {
   BarChart,
   Bar,
@@ -20,8 +22,6 @@ import {
   Eye,
   Zap,
 } from "lucide-react";
-
-const API = import.meta.env.VITE_API_BASE ?? "http://127.0.0.1:8000";
 
 // ✅ Only deployed models
 const ALLOWED_MODELS = ["k-nn_(optimized)", "random_forest"];
@@ -60,9 +60,9 @@ function ExplainabilityPage() {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`${API}/models`);
-        if (!response.ok) throw new Error("Failed to fetch models");
-        const data = await response.json();
+        // ✅ use api instance (baseURL + auth header)
+        const res = await api.get("/models");
+        const data = res.data;
 
         // ✅ keep only allowed models from backend registry
         const filtered = Object.fromEntries(
@@ -74,7 +74,7 @@ function ExplainabilityPage() {
         const ids = Object.keys(filtered);
         if (ids.length > 0) setSelectedModelId(ids[0]);
       } catch (err) {
-        setError(err?.message ?? String(err));
+        setError(err?.response?.data?.detail || err?.message || String(err));
       } finally {
         setLoading(false);
       }
@@ -100,48 +100,38 @@ function ExplainabilityPage() {
         setLoading(true);
         setError(null);
 
-        // reset old data to prevent showing stale charts when switching models
+        // reset old data
         setShapSummary(null);
         setFeatureImportance(null);
         setLimeExplanation(null);
 
         // SHAP
         if (caps?.shap) {
-          const shapResponse = await fetch(`${API}/shap-summary/${selectedModelId}`);
-          if (shapResponse.ok) {
-            const shapData = await shapResponse.json();
-            setShapSummary(shapData);
-          }
+          const shapRes = await api.get(`/shap-summary/${selectedModelId}`);
+          setShapSummary(shapRes.data);
         }
 
         // Feature importance (RF only)
         if (caps?.featureImportance) {
-          const importanceResponse = await fetch(`${API}/feature-importance/${selectedModelId}`);
-          if (importanceResponse.ok) {
-            const importanceData = await importanceResponse.json();
-            setFeatureImportance(importanceData);
-          }
+          const impRes = await api.get(`/feature-importance/${selectedModelId}`);
+          setFeatureImportance(impRes.data);
         }
 
         // LIME
         if (caps?.lime) {
-          const limeResponse = await fetch(
-            `${API}/lime-explanation/${selectedModelId}?sample_index=${sampleIndex}`
-          );
-          if (limeResponse.ok) {
-            const limeData = await limeResponse.json();
-            setLimeExplanation(limeData);
-          }
+          const limeRes = await api.get(`/lime-explanation/${selectedModelId}`, {
+            params: { sample_index: sampleIndex },
+          });
+          setLimeExplanation(limeRes.data);
         }
       } catch (err) {
-        setError(err?.message ?? String(err));
+        setError(err?.response?.data?.detail || err?.message || String(err));
       } finally {
         setLoading(false);
       }
     }
 
     loadExplainability();
-    // IMPORTANT: caps changes when selectedModelId changes, so include it
   }, [selectedModelId, sampleIndex]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Prepare feature importance data for chart
@@ -171,7 +161,8 @@ function ExplainabilityPage() {
   }, [limeExplanation]);
 
   const hasLime = caps?.lime && limeData.length > 0;
-  const hasShap = caps?.shap && (shapSummary?.plot_url || shapSummary?.plot_file || shapSummary?.message);
+  const hasShap =
+    caps?.shap && (shapSummary?.plot_url || shapSummary?.plot_file || shapSummary?.message);
   const showFeatureImportance = caps?.featureImportance; // RF only
 
   if (loading && !selectedModelId) {
@@ -505,7 +496,7 @@ function ExplainabilityPage() {
                     ]}
                   />
 
-                  {/* ✅ GREEN/RED bars (no yellow) */}
+                  {/* ✅ GREEN/RED bars */}
                   <Bar
                     dataKey="weight"
                     radius={[0, 8, 8, 0]}
@@ -513,9 +504,6 @@ function ExplainabilityPage() {
                       const { x, y, width, height, value } = props;
                       const barWidth = Math.abs(width);
                       const barX = value >= 0 ? x : x - barWidth;
-
-                      // Green → pushes toward Malignant (1)
-                      // Red   → pushes toward Benign (0)
                       const fillColor = value >= 0 ? "#22c55e" : "#ef4444";
 
                       return (
